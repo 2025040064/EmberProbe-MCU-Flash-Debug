@@ -50,6 +50,8 @@ module.exports = Object.freeze({
     "keil.importDesc": "Read the device, target and firmware from a project file",
     "keil.current": "Detect and import project",
     "keil.currentDesc": "Find the current Keil project and debugger",
+    "sb.flashing": "Flashing",
+    "sb.flashComplete": "Flash complete",
     "keil.manualConfig": "Manual import and configuration",
     "keil.advanced": "Advanced settings (manual)",
     "keil.chooseProject": "Select a Keil project",

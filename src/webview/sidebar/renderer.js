@@ -42,6 +42,19 @@ function setNotice(area, id, notice) {
 function clearNotice(area, id) {
     notices[area]?.clear(id);
 }
+let flashProgressTimer = null;
+function setFlashProgress(state) {
+    if (flashProgressTimer !== null) clearTimeout(flashProgressTimer);
+    flashProgressTimer = null;
+    const progress = document.getElementById("flashProgress");
+    const label = document.getElementById("flashButtonLabel");
+    if (!progress || !label) return;
+    progress.dataset.state = state;
+    const key = state === "busy" ? "sb.flashing" : state === "success" ? "sb.flashComplete" : "sb.download";
+    label.dataset.i18n = key;
+    label.textContent = t(key);
+    if (state === "success") flashProgressTimer = setTimeout(() => setFlashProgress("idle"), 3500);
+}
 let sideWatch = [],
     writeList = [],
     available = [],
@@ -2975,9 +2988,7 @@ window.EmberProbeMessages.connect(window, {
     notice: function (m) {
         setNotice(m.area, m.id, window.EmberProbeNotice.hostNotice(m.notice));
         if (m.area === "flash" && m.id === "mcu-vscode.download") {
-            const progress = document.getElementById("flashProgress");
-            if (progress)
-                progress.dataset.state = m.notice.busy ? "busy" : m.notice.level === "success" ? "success" : "error";
+            setFlashProgress(m.notice.busy ? "busy" : m.notice.level === "success" ? "success" : "error");
         }
     },
     noticeClear: function (m) {

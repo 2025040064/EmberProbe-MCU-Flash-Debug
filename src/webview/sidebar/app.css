@@ -612,11 +612,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Mic
 .action-content { position: relative; z-index: 1; display: flex; justify-content: center; align-items: center; gap: 8px; }
 .action-content svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; }
 .flash-progress { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
-.flash-progress::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 42%; background: #27a85c; transform: translateX(-100%); }
-.flash-progress[data-state="busy"]::before { animation: flash-progress 1.5s ease-in-out infinite; }
-.flash-progress[data-state="success"]::before { width: 100%; transform: none; }
-@keyframes flash-progress { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
-@media (prefers-reduced-motion: reduce) { .flash-progress[data-state="busy"]::before { animation: none; transform: none; } }
+.flash-progress::before { content: ""; position: absolute; inset: 0; background: #27a85c; transform: scaleX(0); transform-origin: left; transition: transform .35s ease-out; }
+.flash-progress[data-state="busy"]::before { transform: scaleX(.9); transition: transform 8s linear; }
+.flash-progress[data-state="success"]::before { transform: scaleX(1); }
+.flash-check { display: none; }
+.flash-progress[data-state="success"] + .action-content .flash-check { display: block; }
+.flash-progress[data-state="success"] + .action-content svg:not(.flash-check) { display: none; }
+@media (prefers-reduced-motion: reduce) { .flash-progress::before { transition: none !important; } .flash-progress[data-state="busy"]::before { transform: scaleX(.15); } }
 .memory-inline .other-block-head, .memory-inline > .memory-label { font-size: 12px; }
 .memory-inline .memory-refresh { min-width: 30px; height: 28px; font-size: 17px; }
 .memory-inline .memory-summary > .memory-summary-item { min-height: 34px; }

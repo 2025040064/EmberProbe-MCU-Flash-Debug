@@ -50,6 +50,8 @@ module.exports = Object.freeze({
     "keil.importDesc": "选择工程文件，自动读取芯片、Target 和固件",
     "keil.current": "一键识别并导入",
     "keil.currentDesc": "自动识别当前 Keil 工程与调试器",
+    "sb.flashing": "烧录中",
+    "sb.flashComplete": "烧录完成",
     "keil.manualConfig": "手动导入与配置",
     "keil.advanced": "高级设置（手动调整）",
     "keil.chooseProject": "选择要导入的 Keil 工程",

@@ -2,6 +2,7 @@
 
 const assert = require("assert");
 const { render } = require("./helpers/render-webview");
+const { FakeClock } = require("./helpers/fake-clock");
 const { getModernWebviewContent } = require("../src/modernView");
 
 const configured = { elf: "app.elf", debugger: "interface/stlink.cfg", mcu: "stm32f4x.cfg" };
@@ -85,3 +86,36 @@ try {
     view.close();
 }
 console.log("Sidebar layout: Keil import, serial entry, memory and collapsible device tools");
+
+(async () => {
+    const clock = new FakeClock();
+    const panel = render(getModernWebviewContent(configured, "zh"), {}, { clock });
+    try {
+        const progress = panel.document.getElementById("flashProgress");
+        const label = panel.document.getElementById("flashButtonLabel");
+        const send = (notice) => panel.send({ type: "notice", area: "flash", id: "mcu-vscode.download", notice });
+        assert.ok(panel.document.querySelector(".flash-check"), "successful flash has a check icon");
+        send({ level: "info", busy: true });
+        assert.strictEqual(label.textContent, "烧录中");
+        send({ level: "success" });
+        assert.strictEqual(progress.dataset.state, "success");
+        assert.strictEqual(label.textContent, "烧录完成");
+        await clock.advance(3500);
+        assert.strictEqual(progress.dataset.state, "idle", "success returns to the original button");
+        assert.strictEqual(label.textContent, "烧录");
+        send({ level: "success" });
+        await clock.advance(1000);
+        send({ level: "info", busy: true });
+        await clock.advance(3500);
+        assert.strictEqual(progress.dataset.state, "busy", "an earlier success timer cannot interrupt a new flash");
+        send({ level: "error" });
+        assert.strictEqual(progress.dataset.state, "error");
+        assert.strictEqual(label.textContent, "烧录");
+        panel.assertHealthy();
+    } finally {
+        panel.close();
+    }
+})().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+});
