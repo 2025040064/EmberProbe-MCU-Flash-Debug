@@ -107,6 +107,20 @@ function assertSafeEntryPath(staging, entryPath) {
     }
 }
 
+// Windows scanners may retain a handle briefly after extraction or executable verification.
+// Do not retry against an existing destination: concurrent publishers are handled by verification below.
+async function renameInstallDirectory(from, to) {
+    for (let attempt = 0; ; attempt++) {
+        try {
+            fs.renameSync(from, to);
+            return;
+        } catch (error) {
+            if (!["EPERM", "EACCES", "EBUSY"].includes(error.code) || attempt >= 4 || fs.existsSync(to)) throw error;
+            await new Promise((resolve) => setTimeout(resolve, 100 * 2 ** attempt));
+        }
+    }
+}
+
 // Installs the bundle into global storage; progress(report) reports progress and verifyBinary checks the staged files
 // before the old version is replaced. Returns { ok, path?, version?, error? }, where path is the absolute openocd
 // executable path.
@@ -213,21 +227,25 @@ async function installBundledOpenOcd(vscode, context, progress, verifyBinary, { 
     let movedOld = false;
     try {
         if (!reuse && fs.existsSync(dest)) {
-            fs.renameSync(dest, backup);
+            await renameInstallDirectory(dest, backup);
             movedOld = true;
         }
-        fs.renameSync(staging, dest);
+        await renameInstallDirectory(staging, dest);
     } catch (error) {
         // Another VS Code window may have published this exact archive while we extracted it.
         // Reuse its verified runtime without moving or replacing files it may already be running.
-        if (reuse && ["EEXIST", "ENOTEMPTY", "EPERM"].includes(error.code) && fs.existsSync(dest)) {
-            fs.rmSync(staging, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+        if (reuse && ["EEXIST", "ENOTEMPTY", "EPERM", "EACCES", "EBUSY"].includes(error.code) && fs.existsSync(dest)) {
+            try {
+                fs.rmSync(staging, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+            } catch {
+                // A locked unused staging directory must not prevent reusing the verified published runtime.
+            }
             return installBundledOpenOcd(vscode, context, progress, verifyBinary, { reuse: true });
         }
         // Restore the old install if switching to the new directory fails; staging and backup stay inside the
         // extension's global storage subdirectory.
         try {
-            if (!fs.existsSync(dest) && movedOld && fs.existsSync(backup)) fs.renameSync(backup, dest);
+            if (!fs.existsSync(dest) && movedOld && fs.existsSync(backup)) await renameInstallDirectory(backup, dest);
         } catch (e) {
             /* ignore */
         }
@@ -236,7 +254,10 @@ async function installBundledOpenOcd(vscode, context, progress, verifyBinary, { 
         } catch (e) {
             /* ignore */
         }
-        return { ok: false, error: `替换旧安装失败：${error.message || error}` };
+        const detail = ["EPERM", "EACCES", "EBUSY"].includes(error.code)
+            ? `目录被占用或缺少权限，请关闭其他 OpenOCD 调试会话后重新检测，或选择已解压的 OpenOCD 路径。${error.message || error}`
+            : error.message || error;
+        return { ok: false, error: `发布 OpenOCD 安装失败：${detail}` };
     }
     try {
         fs.rmSync(backup, { recursive: true, force: true });

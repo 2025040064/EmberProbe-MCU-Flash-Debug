@@ -17,6 +17,9 @@ const path = require("path");
 const modernView = require("./modernView");
 const { versionLabel } = require("./buildInfo");
 const autoDetect = require("./autoDetect");
+const { SerialPanel } = require("./services/serialPanel");
+const { runtimeMemoryItems, decodeRuntimeMemory } = require("./services/runtimeMemory");
+const { importKeilProject } = require("./services/keilImport");
 const { ELF_FILE_GLOB } = require("../skills/_emberprobe/target-detection");
 const skillInstaller = require("./skillInstaller");
 const openocdRunner = require("./openocdRunner");
@@ -240,6 +243,7 @@ class MainViewProvider {
         });
         void this._externalDebug.releaseIfDisabled().catch(console.error);
         this._liveSession = null;
+        this._serialPanel = null;
         this._managedDebugServer = null;
         this._managedDebugGroup = null;
         this._managedDebugToken = "";
@@ -736,6 +740,19 @@ class MainViewProvider {
         return this._openOcdStatusService.resolve(executable);
     }
     registerCommandHandlers() {
+        this.commandHandlers["mcu-vscode.openSerial"] = async () => {
+            this._serialPanel ||= new SerialPanel({
+                vscode,
+                context: this._context,
+                t: (key) => this._t(key),
+                onStatus: (status) => this._webviewView?.webview.postMessage({ type: "serialStatus", ...status })
+            });
+            this._serialPanel.open();
+        };
+        this.commandHandlers["mcu-vscode.importKeil"] = async (resource) =>
+            importKeilProject(this, vscode, { resource, browse: !resource });
+        this.commandHandlers["mcu-vscode.readCurrentKeil"] = async (resource) =>
+            importKeilProject(this, vscode, { resource });
         this.commandHandlers["mcu-vscode.autoDetect"] = async () => this.runAutoDetect(true);
         this.commandHandlers["mcu-vscode.selectCubeMx"] = () => this._cubemxConfiguration.select("cubemx");
         this.commandHandlers["mcu-vscode.selectIoc"] = () => this._cubemxConfiguration.select("ioc");
@@ -3977,6 +3994,7 @@ class MainViewProvider {
             });
     }
     _onElfChange(phase, result, entries) {
+        if (["metadata", "symbolsDone", "dwarfReady"].includes(phase)) this._invalidateConsumerTypes();
         // Worker chunks and DWARF display-name enrichment mutate the same symbols array.
         this._symbolNameIndexes?.delete(result.symbols);
         const version = this._elfVersion(result);
@@ -4364,6 +4382,8 @@ class MainViewProvider {
             type: "liveStatus",
             ...this._samplingStatus()
         });
+        post({ type: "memoryRuntime", state: this._runtimeMemoryItems().length ? "stopped" : "missing" });
+        if (this._serialPanel?.monitor) post({ type: "serialStatus", ...this._serialPanel.monitor.snapshot() });
         if (this._latestSidebarSamples.size) {
             const now = Date.now();
             const scalarSamples = [];
@@ -4382,6 +4402,8 @@ class MainViewProvider {
     _activeReadPlan() {
         const lists = [];
         const expansions = [];
+        lists.push(this._runtimeMemoryItems());
+        expansions.push(null);
         for (const entry of this._livePanels.values()) {
             lists.push(this._scalarWatchList(entry.watchKey));
             expansions.push(this._panelRuntimeExpansions(entry.watchKey));
@@ -4399,6 +4421,13 @@ class MainViewProvider {
         }
         const plan = buildActiveReadPlan(lists, elfSymbols, expansions);
         return this._runtimeReadRanges(plan);
+    }
+    _runtimeMemoryItems() {
+        try {
+            return runtimeMemoryItems(this.readElfSymbols());
+        } catch {
+            return [];
+        }
     }
     _runtimeReadRanges(plan, result) {
         if (!plan.some((item) => item.runtimeLayout)) return plan;
@@ -4768,6 +4797,7 @@ class MainViewProvider {
             return m;
         };
         const sidebar = build(CACHE_KEYS.sidebarWatchList);
+        for (const item of this._runtimeMemoryItems()) if (!sidebar.has(item.name)) sidebar.set(item.name, item.type);
         // Write list variables are decoded with their own watch type and pushed to the sidebar; for the same name the
         // watch list type wins
         for (const item of this._context.workspaceState.get(CACHE_KEYS.sidebarWriteList) || []) {
@@ -5044,6 +5074,8 @@ class MainViewProvider {
         // Every source (managed sampling, worker, paused DAP reads) passes the same hold, so a runtime
         // object keeps its last consistent tree through transient misses (see runtimeSampleHold.js).
         samples = (this._runtimeSampleHold ||= new RuntimeSampleHold()).apply(samples, t);
+        const memory = decodeRuntimeMemory(samples);
+        if (memory) this._webviewView?.webview.postMessage({ type: "memoryRuntime", ...memory });
         const types = this._getCachedConsumerTypes();
         const graphNames = consumers && new Set(consumers.graphNames);
         const sidebarNames = consumers && new Set(consumers.sidebarNames);
@@ -6026,6 +6058,7 @@ class MainViewProvider {
         this._elfService.invalidate();
         if (this._shutdownPromise) return this._shutdownPromise;
         this._shutdownPromise = (async () => {
+            await this._serialPanel?.dispose();
             // Close probe access and the Agent Bridge first: a call arriving mid-shutdown must not start a
             // new OpenOCD process after sampling and debugging have already been stopped.
             this._probeCoordinator?.close();
@@ -6539,6 +6572,14 @@ class MainViewProvider {
             );
     }
     async runAutoDetect(force) {
+        if (!force && !this._context.workspaceState.get(CACHE_KEYS.elfPath) && vscode.workspace?.findFiles) {
+            try {
+                const imported = await importKeilProject(this, vscode, { automatic: true });
+                if (imported) return imported;
+            } catch (error) {
+                console.error("Automatic Keil import skipped:", error.message);
+            }
+        }
         if (force) this._assertConnectionEditable({ debugger: true, mcu: true });
         const detectedIoc = force ? await this._cubemxConfiguration.detectIoc() : "";
         const currentElf = this._context.workspaceState.get(CACHE_KEYS.elfPath);
@@ -7016,6 +7057,8 @@ class MainViewProvider {
             {
                 versionLabel: versionLabel(this._context.extension?.packageJSON?.version),
                 elf: elf ? path.basename(elf) : "",
+                keilProject: this._context.workspaceState.get("mcu.keilProject") || "",
+                keilTarget: this._context.workspaceState.get("mcu.keilTarget") || "",
                 cubemxPath: vscode.workspace.getConfiguration("emberprobe").get("cubemxPath", ""),
                 iocPath: this._context.workspaceState.get(CACHE_KEYS.iocPath) || "",
                 cubemxStatus: this._cubemxConfiguration.status,

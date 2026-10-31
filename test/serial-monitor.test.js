@@ -1,0 +1,56 @@
+"use strict";
+const assert = require("assert");
+const { SerialPortMock } = require("serialport");
+const { SerialMonitor, encodeInput, formatRecords } = require("../src/services/serialMonitor");
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+(async () => {
+    SerialPortMock.binding.reset();
+    SerialPortMock.binding.createPort("COM42", { echo: true, record: true });
+    const events = [];
+    const monitor = new SerialMonitor({ SerialPort: SerialPortMock, onEvent: (event) => events.push(event) });
+    assert((await monitor.list()).some((port) => port.path === "COM42"));
+    assert.deepStrictEqual(encodeInput("A5 00 ff", "hex", "none"), Buffer.from([0xa5, 0, 0xff]));
+    assert.throws(() => encodeInput("a 00", "hex", "none"), /hex/i);
+    assert.strictEqual(encodeInput("hi", "text", "crlf").toString(), "hi\r\n");
+    await monitor.open({ path: "COM42", baudRate: 115200, dataBits: 8, stopBits: 1, parity: "none" });
+    await monitor.send({ text: "你好", mode: "text", newline: "none" });
+    await delay(60);
+    assert.strictEqual(monitor.snapshot().txBytes, 6);
+    assert.strictEqual(monitor.snapshot().rxBytes, 6);
+    const records = monitor.snapshot().records;
+    assert(formatRecords(records, "text").includes("你好"));
+    assert(formatRecords(records, "hex").includes("E4 BD A0 E5 A5 BD"));
+    monitor.startRepeat({ text: "01 02", mode: "hex", newline: "none", intervalMs: 20 });
+    await delay(75);
+    monitor.stopRepeat();
+    assert(monitor.snapshot().txBytes >= 8);
+    await monitor.close();
+    const count = monitor.snapshot().txBytes;
+    await delay(50);
+    assert.strictEqual(monitor.snapshot().txBytes, count, "close stops repeat sending");
+    assert.strictEqual(monitor.snapshot().connected, false);
+    assert(events.some((event) => event.type === "serialData"));
+    monitor.clear();
+    assert.strictEqual(monitor.snapshot().records.length, 0);
+    assert.strictEqual(monitor.snapshot().rxBytes, 0);
+    await assert.rejects(monitor.send({ text: "x", mode: "text", newline: "none" }), /closed/i);
+    await monitor.open({ path: "COM42", baudRate: 9600, dataBits: 8, stopBits: 1, parity: "none" });
+    monitor.startRepeat({ text: "x", mode: "text", newline: "none", intervalMs: 20 });
+    monitor.port._disconnected(new Error("simulated disconnect"));
+    await delay(50);
+    assert.strictEqual(monitor.snapshot().connected, false, "disconnection clears the connection");
+    assert.strictEqual(monitor.snapshot().repeating, false, "disconnection stops repeat sending");
+    assert(events.some((event) => event.type === "serialError"));
+    await monitor.open({ path: "COM42", baudRate: 9600, dataBits: 8, stopBits: 1, parity: "none" });
+    await monitor.close();
+    for (let i = 0; i < 2100; i++) monitor.record("rx", Buffer.alloc(1024));
+    assert(monitor.snapshot().records.length <= 2000);
+    assert(monitor.snapshot().droppedBytes > 0);
+    monitor.clear();
+    console.log("Serial monitor tests passed");
+})().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+});

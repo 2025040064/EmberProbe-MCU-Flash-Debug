@@ -18,6 +18,9 @@ function activate(context) {
     const userSelection = [vscode.TextEditorSelectionChangeKind.Keyboard, vscode.TextEditorSelectionChangeKind.Mouse];
 
     const subscriptions = [
+        vscode.commands.registerCommand("mcu-vscode.openSerial", () => provider.commandHandlers["mcu-vscode.openSerial"]()),
+        vscode.commands.registerCommand("mcu-vscode.importKeil", resource => provider.commandHandlers["mcu-vscode.importKeil"](resource)),
+        vscode.commands.registerCommand("mcu-vscode.readCurrentKeil", resource => provider.commandHandlers["mcu-vscode.readCurrentKeil"](resource)),
         vscode.window.registerWebviewViewProvider("mcu-vscode.mainView", provider, {
             webviewOptions: { retainContextWhenHidden: true }
         }),

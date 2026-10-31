@@ -249,6 +249,7 @@ const memoryView = window.EmberProbeMemoryView?.create({ api, t, uiState });
 const mcuConfigSection = document.getElementById("mcuConfigSection");
 for (const id of [
     "mcuConfigSection",
+    "deviceToolsSection",
     "memoryAnalysisSection",
     "chipInfoSection",
     "liveValuesSection",
@@ -2949,8 +2950,15 @@ attachResizeHandle(
 );
 document.getElementById("githubLink").onclick = () => api?.postMessage({ type: "openGitHub" });
 window.EmberProbeMessages.connect(window, {
+    serialStatus: function (m) {
+        const status = document.getElementById("serialStatus");
+        if (status) status.textContent = m.connected ? `${t("serial.connected")}: ${m.path}` : t("serial.disconnected");
+    },
     memoryAnalysis: function (m) {
         memoryView?.receive(m);
+    },
+    memoryRuntime: function (m) {
+        memoryView?.runtime(m);
     },
     initSuccess: function (m) {
         setStat("ready", "sb.ready");
@@ -3147,6 +3155,7 @@ window.EmberProbeMessages.connect(window, {
         sbOnComposite(m.samples || []);
     },
     liveStatus: function (m) {
+        if (m.running === false && m.intentEnabled !== true) memoryView?.runtime({ state: "stopped", passive: true });
         if (m.error && (m.key || m.message))
             setNotice("live", "live", window.EmberProbeNotice.hostNotice({ error: m }));
         else if (m.running) clearNotice("live", "live");

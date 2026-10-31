@@ -4,6 +4,8 @@ const { toUiError } = require("./errorEnvelope");
 // Sidebar notice box for each command's messages; errors and busy warnings keep the command id, so the
 // next run of the same command replaces them.
 const COMMAND_AREAS = Object.freeze({
+    "mcu-vscode.importKeil": "config",
+    "mcu-vscode.readCurrentKeil": "config",
     "mcu-vscode.download": "flash",
     "mcu-vscode.debug": "flash",
     "mcu-vscode.attachDebug": "flash",

@@ -10,6 +10,10 @@ const view = render(html);
 let saved;
 try {
     const config = view.document.getElementById(ids[0]);
+    const deviceTools = view.document.getElementById("deviceToolsSection");
+    assert.strictEqual(deviceTools.open, false);
+    deviceTools.open = true;
+    deviceTools.dispatchEvent(new view.window.Event("toggle"));
     assert.strictEqual(config.open, false, "the MCU configuration card starts folded");
     config.open = true;
     config.dispatchEvent(new view.window.Event("toggle"));
@@ -38,6 +42,7 @@ try {
     assert.strictEqual(taskBox.style.height, "320px");
     assert.strictEqual(view.window.getComputedStyle(view.document.querySelector(".rtos-table th")).position, "static");
     saved = view.getState();
+    assert.strictEqual(saved.sections.deviceToolsSection, true);
     for (const id of ids) assert.strictEqual(saved.sections[id], false);
     const headers = [...view.document.querySelectorAll(".rtos-table th")].map((cell) => cell.textContent);
     assert.strictEqual(headers.length, 5);
@@ -49,6 +54,7 @@ try {
 }
 const restored = render(html, saved);
 try {
+    assert.strictEqual(restored.document.getElementById("deviceToolsSection").open, true);
     for (const id of ids) assert.strictEqual(restored.document.getElementById(id).open, false);
     assert.strictEqual(
         restored.document.getElementById("rtosTableWrap").style.height,

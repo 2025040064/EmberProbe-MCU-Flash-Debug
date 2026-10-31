@@ -5,6 +5,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
+const tar = require("tar");
 const targetManifest = require("../resources/openocd-targets-manifest.json");
 const installer = require("../src/openocdInstaller");
 const { discoverTargetConfigs } = require("../src/openocdScripts");
@@ -40,6 +41,84 @@ const {
         }
     } finally {
         fs.rmSync(staging, { recursive: true, force: true });
+    }
+
+    // Windows scanners can briefly hold the verified executable's directory after --version exits.
+    const lockedRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ep-publish-"));
+    const originalRename = fs.renameSync;
+    try {
+        const fixture = path.join(lockedRoot, "fixture");
+        fs.mkdirSync(path.join(fixture, "bin"), { recursive: true });
+        fs.writeFileSync(path.join(fixture, "bin", OPENOCD_BIN), "fixture");
+        const archive = path.join(lockedRoot, "runtime.tar.gz");
+        await tar.c({ file: archive, cwd: fixture, gzip: true }, ["bin"]);
+        const context = {
+            asAbsolutePath: () => archive,
+            globalStorageUri: { fsPath: path.join(lockedRoot, "storage") }
+        };
+        let attempts = 0;
+        fs.renameSync = (from, to) => {
+            if (path.basename(String(from)).startsWith(".openocd-staging-")) {
+                attempts++;
+                if (attempts <= 2)
+                    throw Object.assign(new Error("EPERM: operation not permitted, rename"), { code: "EPERM" });
+            }
+            return originalRename(from, to);
+        };
+        const result = await installBundledOpenOcd(null, context, null, async () => ({ ok: true }), { reuse: true });
+        assert.ok(result.ok, `temporary EPERM must recover: ${result.error}`);
+        assert.strictEqual(attempts, 3);
+        assert.ok(fs.existsSync(result.path));
+        fs.renameSync = originalRename;
+        const manual = await installBundledOpenOcd(null, context, null, async () => ({ ok: true }));
+        assert.ok(manual.ok);
+        const marker = path.join(installDir(context), "existing.marker");
+        fs.writeFileSync(marker, "keep");
+        attempts = 0;
+        fs.renameSync = (from, to) => {
+            if (path.basename(String(from)).startsWith(".openocd-staging-")) {
+                attempts++;
+                throw Object.assign(new Error("EBUSY: resource busy, rename"), { code: "EBUSY" });
+            }
+            return originalRename(from, to);
+        };
+        const failed = await installBundledOpenOcd(null, context, null, async () => ({ ok: true }));
+        assert.strictEqual(failed.ok, false, "a permanent lock must return a bounded failure");
+        assert.strictEqual(attempts, 5, "retries are bounded");
+        assert.match(failed.error, /占用|权限/);
+        assert.strictEqual(fs.readFileSync(marker, "utf8"), "keep", "failed publication restores the old install");
+        assert.ok(fs.existsSync(result.path), "a failed new install preserves the published runtime");
+
+        const raceContext = { ...context, globalStorageUri: { fsPath: path.join(lockedRoot, "race") } };
+        const originalRemove = fs.rmSync;
+        let verified = 0;
+        try {
+            fs.renameSync = (from, to) => {
+                originalRename(from, to);
+                fs.mkdirSync(from); // This publisher's unused staging directory is still scanner-locked.
+                throw Object.assign(new Error("EPERM: another window published the runtime"), { code: "EPERM" });
+            };
+            fs.rmSync = () => {
+                throw Object.assign(new Error("EPERM: staging cleanup locked"), { code: "EPERM" });
+            };
+            const raced = await installBundledOpenOcd(
+                null,
+                raceContext,
+                null,
+                async () => {
+                    verified++;
+                    return { ok: true };
+                },
+                { reuse: true }
+            );
+            assert.ok(raced.ok, "a locked staging cleanup must not hide a valid concurrent installation");
+            assert.strictEqual(verified, 2, "the published runtime is verified before reuse");
+        } finally {
+            fs.rmSync = originalRemove;
+        }
+    } finally {
+        fs.renameSync = originalRename;
+        fs.rmSync(lockedRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
 
     // Platform mapping: the current platform maps to a known key or null

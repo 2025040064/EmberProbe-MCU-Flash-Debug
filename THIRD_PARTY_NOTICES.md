@@ -8,6 +8,7 @@ The bundled extension includes the following npm runtime packages:
 - `fast-xml-parser` 5.11.0 and its runtime dependencies (`@nodable/entities`, `fast-xml-builder`, `is-unsafe`, `path-expression-matcher`, `strnum`, `anynum`, and `xml-naming`) — MIT License
 - `yauzl` 3.4.0 and `pend` 1.2.0 — MIT License
 - `koffi` 3.3.1 and `@koromix/koffi-win32-x64` 3.3.1 — MIT License, Copyright (c) 2026 Niels Martignène; their license files are retained in the packaged dependencies.
+- `serialport` 12.0.0 and its `@serialport/*` runtime packages — MIT License; the packages and their license files are retained in the VSIX. Their runtime dependencies include `debug`, `ms`, `node-addon-api` and `node-gyp-build`; their license files are retained as well.
 
 The MCP server (`dist/mcp-server.js`) bundles:
 

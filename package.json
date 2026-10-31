@@ -139,6 +139,18 @@
       {
         "command": "mcu-vscode.switchWorkspaceSvd",
         "title": "EmberProbe: 切换当前工作区 SVD"
+      },
+      {
+        "command": "mcu-vscode.importKeil",
+        "title": "EmberProbe: 导入 Keil 工程"
+      },
+      {
+        "command": "mcu-vscode.readCurrentKeil",
+        "title": "EmberProbe: 读取当前 Keil 工程"
+      },
+      {
+        "command": "mcu-vscode.openSerial",
+        "title": "EmberProbe: 串口监视器"
       }
     ],
     "menus": {
@@ -157,6 +169,18 @@
           "command": "mcu-vscode.folderDownload",
           "group": "mcu-vscode@2",
           "when": "explorerResourceIsFolder"
+        },
+        {
+          "command": "mcu-vscode.importKeil",
+          "group": "mcu-vscode@0",
+          "when": "resourceExtname == .uvprojx || resourceExtname == .uvproj"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "mcu-vscode.readCurrentKeil",
+          "group": "navigation",
+          "when": "resourceExtname == .uvprojx || resourceExtname == .uvproj"
         }
       ]
     },
@@ -1068,7 +1092,10 @@
     "native/openocd/build-lock.json",
     "native/openocd/build.sh",
     "native/openocd/prepare-build.js",
-    "native/openocd/README.md"
+    "native/openocd/README.md",
+    "dist/node_modules/**/*",
+    "docs/SERIAL-MONITOR.md",
+    "docs/examples/emberprobe_ram_metrics.c"
   ],
   "scripts": {
     "test": "npm run check",
@@ -1106,6 +1133,7 @@
     "fast-xml-parser": "^5.11.0",
     "fzstd": "^0.1.1",
     "koffi": "3.3.1",
+    "serialport": "12.0.0",
     "tar": "^7.5.22",
     "yauzl": "^3.4.0"
   },

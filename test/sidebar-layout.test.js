@@ -12,8 +12,11 @@ try {
     view.assertHealthy();
     const doc = view.document;
     const config = doc.getElementById("mcuConfigSection");
-    assert.strictEqual(config.nextElementSibling.id, "flashDebugSection");
-    assert.strictEqual(config.previousElementSibling.id, "noticeGlobal");
+    assert.ok(config.nextElementSibling.classList.contains("serial-entry"));
+    assert.strictEqual(config.nextElementSibling.nextElementSibling.id, "flashDebugSection");
+    assert.strictEqual(config.previousElementSibling.id, "keilImportSection");
+    assert.strictEqual(doc.getElementById("keilImportSection").previousElementSibling.id, "noticeGlobal");
+    assert.strictEqual(doc.querySelector("#keilImportSection button").dataset.command, "mcu-vscode.readCurrentKeil");
     assert.strictEqual(config.open, false, "the configuration card is folded on first use");
     const summary = doc.getElementById("mcuConfigSummary");
     assert.strictEqual(summary.textContent, "STM32F4x · ST-Link");
@@ -26,11 +29,12 @@ try {
     view.send({ type: "debuggerConfig", debugger: "" });
     assert.strictEqual(summary.textContent, "", "an incomplete configuration names nothing");
 
-    // Agent Skills and the MCP installer sit in the flash card's Other dropdown, without the old description.
-    const other = doc.getElementById("memoryAnalysisSection");
-    assert.strictEqual(doc.getElementById("skillStatus").closest("#memoryAnalysisSection"), other);
+    // Chip information, Agent Skills and MCP share one collapsible section.
+    const other = doc.getElementById("deviceToolsSection");
+    assert.strictEqual(doc.getElementById("skillStatus").closest("#deviceToolsSection"), other);
+    assert.ok(other.contains(doc.getElementById("chipInfoSection")));
     const mcp = other.querySelector('[data-command="mcu-vscode.installMcpServer"]');
-    assert.ok(mcp, "Other offers the MCP installer");
+    assert.ok(mcp, "Device tools offers the MCP installer");
     assert.strictEqual(doc.querySelector(".skill-row, .skill-tree"), null);
     mcp.click();
     assert.deepStrictEqual(view.messages.at(-1), { type: "executeCommand", cmd: "mcu-vscode.installMcpServer" });
@@ -70,4 +74,4 @@ try {
 } finally {
     view.close();
 }
-console.log("Sidebar layout: folded MCU card, shared flash notice box, Agent entries under Other");
+console.log("Sidebar layout: Keil import, serial entry, memory and collapsible device tools");

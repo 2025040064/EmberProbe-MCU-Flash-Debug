@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const { parseMap, parseLinkerScript, stripComments } = require("../memoryRegions");
 const { analyzeMemory, topSymbols } = require("../memoryAnalysis");
+const { readKeilProject } = require("./keilProject");
 
 class MemoryAnalysisService {
     /** @param {any} options */
@@ -13,6 +14,7 @@ class MemoryAnalysisService {
         this.roots = options.roots || (() => []);
         this.findScripts = options.findScripts || (async () => []);
         this.selection = options.selection || (() => ({}));
+        this.keilSelection = options.keilSelection || (() => ({}));
         this.regionKinds = options.regionKinds || (() => ({}));
         this.files = new Set();
         this.textCache = new Map();
@@ -90,18 +92,38 @@ class MemoryAnalysisService {
         const selected = this.selection(snapshot.elf.path) || {};
         const diagnostics = [];
         this.files = new Set([snapshot.elf.path]);
-        const source = { kind: "elf", mapFile: null, linkerScript: null, files: [], candidates: [] };
+        const source = { kind: "elf", mapFile: null, linkerScript: null, keilProject: null, files: [], candidates: [] };
         let definitions = [];
         const warn = (code, message) => diagnostics.push({ code, message });
         let maps = [];
         const requestedMap = params.mapFile ?? selected.mapFile;
+        const keil = this.keilSelection();
+        if (!requestedMap && !params.linkerScript && !selected.linkerScript && keil.project && keil.target) {
+            try {
+                const candidates = await readKeilProject(keil.project);
+                const target = candidates.find((item) => item.name === keil.target);
+                const same = (a, b) =>
+                    process.platform === "win32"
+                        ? path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase()
+                        : path.resolve(a) === path.resolve(b);
+                if (target?.firmware && same(target.firmware, snapshot.elf.path) && target.memoryRegions.length) {
+                    definitions = target.memoryRegions;
+                    source.kind = "keil";
+                    source.keilProject = keil.project;
+                    this.files.add(keil.project);
+                }
+            } catch (error) {
+                warn("MEMORY_SOURCE_READ_FAILED", error.message);
+            }
+        }
         if (requestedMap) maps = [this.filePath(requestedMap, snapshot.elf.path, ".map")];
         else {
             maps = [snapshot.elf.path.replace(/\.(?:elf|axf|out)$/i, ".map"), snapshot.elf.path + ".map"];
             for (const file of maps) this.files.add(file);
             maps = [...new Set(maps)].filter((file) => this.fs.existsSync(file));
         }
-        if (maps.length > 1) {
+        if (definitions.length) maps = [];
+        else if (maps.length > 1) {
             source.candidates.push(...maps);
             warn("MEMORY_SOURCE_AMBIGUOUS", "Choose between the matching .map files");
         } else if (maps.length === 1) {

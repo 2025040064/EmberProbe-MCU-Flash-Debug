@@ -15,9 +15,22 @@
         return `${value} B`;
     }
     function render(result, t) {
-        const summaries = ["flash", "ram"].map(
-            (kind) => "<span><strong>" + kind.toUpperCase() + "</strong> " + esc(bytes(result[kind].total)) + "</span>"
-        );
+        const summaries = ["flash", "ram"].map((kind) => {
+            const regions = result.regions.filter((region) => region.type === kind);
+            const capacity =
+                regions.length &&
+                regions.every((region) => region.complete && Number.isFinite(region.capacity)) &&
+                !result[kind].estimated
+                    ? regions.reduce((total, region) => total + region.capacity, 0)
+                    : null;
+            const used = result[kind].total;
+            const percent = capacity ? Math.min(100, Math.max(0, (used / capacity) * 100)) : null;
+            const progress =
+                percent === null
+                    ? ""
+                    : `<progress max="100" value="${percent}" aria-label="${kind.toUpperCase()}"></progress>`;
+            return `<span class="memory-summary-item">${progress}<strong>${kind.toUpperCase()}</strong><span>${esc(bytes(used))}${capacity ? " / " + esc(bytes(capacity)) : ""}</span></span>`;
+        });
         const regions = result.regions
             .map((region) => {
                 const percent = region.percent == null ? "—" : `${region.percent.toFixed(2)}%`;
@@ -95,7 +108,8 @@
                     "</li>"
             )
             .join("");
-        const source = result.source.mapFile || result.source.linkerScript || result.elf.path;
+        const source =
+            result.source.mapFile || result.source.linkerScript || result.source.keilProject || result.elf.path;
         const symbols = result.topSymbols
             .map(
                 (symbol) =>
@@ -139,6 +153,8 @@
         const body = document.getElementById("memoryBody");
         const refresh = document.getElementById("memoryRefresh");
         const select = document.getElementById("memorySelectSource");
+        const runtime = document.getElementById("runtimeMemory");
+        let runtimeState = "missing";
         let last = { state: "idle" },
             completedResult = null,
             requestId = -1;
@@ -194,6 +210,30 @@
         repaint();
         return {
             render: repaint,
+            runtime(message) {
+                if (!runtime) return;
+                if (message.passive && runtimeState === "missing") return;
+                runtimeState = message.state;
+                const label = t("memory.runtimeRam");
+                if (
+                    message.state === "ready" &&
+                    Number.isFinite(message.used) &&
+                    Number.isFinite(message.total) &&
+                    message.total > 0 &&
+                    message.used <= message.total
+                ) {
+                    const percent = Math.min(100, Math.max(0, (message.used / message.total) * 100));
+                    runtime.innerHTML = `<strong>${esc(label)}</strong><span>${esc(bytes(message.used))} / ${esc(bytes(message.total))}</span><progress max="100" value="${percent}" aria-label="${esc(label)}"></progress>`;
+                } else {
+                    const key =
+                        message.state === "missing"
+                            ? "memory.runtimeMissing"
+                            : message.state === "invalid"
+                              ? "memory.runtimeInvalid"
+                              : "memory.runtimeStopped";
+                    runtime.innerHTML = `<strong>${esc(label)}</strong><span>${esc(t(key))}</span>`;
+                }
+            },
             receive(message) {
                 if (message.requestId != null && message.requestId < requestId) return;
                 if (message.requestId != null) requestId = message.requestId;

@@ -13,7 +13,7 @@ const extensionBuild = esbuild.build({
     platform: "node",
     format: "cjs",
     target: "node18",
-    external: ["vscode", "koffi"],
+    external: ["vscode", "koffi", "serialport"],
     minify: false,
     sourcemap: false,
     legalComments: "eof"
@@ -139,6 +139,37 @@ function writeBuildInfo() {
     );
 }
 
+// Keep the Node-API prebuilds and each package's relative runtime dependencies intact.
+function stageSerialPort() {
+    const seen = new Set();
+    const install = (name, parent) => {
+        let directory = parent;
+        let manifest;
+        while (true) {
+            const candidate = path.join(directory, "node_modules", name, "package.json");
+            if (fs.existsSync(candidate)) {
+                manifest = candidate;
+                break;
+            }
+            const next = path.dirname(directory);
+            if (next === directory) throw new Error(`Missing serial dependency ${name}`);
+            directory = next;
+        }
+        const source = path.dirname(manifest);
+        const relative = path.relative(path.join(__dirname, "node_modules"), source);
+        if (relative.startsWith("..") || seen.has(relative)) return;
+        seen.add(relative);
+        const target = path.join(__dirname, "dist", "node_modules", relative);
+        fs.cpSync(source, target, {
+            recursive: true,
+            filter: (entry) => !path.relative(source, entry).split(path.sep).includes("node_modules")
+        });
+        for (const dependency of Object.keys(JSON.parse(fs.readFileSync(manifest, "utf8")).dependencies || {}))
+            install(dependency, source);
+    };
+    install("serialport", __dirname);
+}
+
 Promise.all([
     extensionBuild,
     samplingBuild,
@@ -152,6 +183,7 @@ Promise.all([
 ])
     .then(() => {
         stageSamplingTimer();
+        stageSerialPort();
         writeBuildInfo();
     })
     .catch((error) => {

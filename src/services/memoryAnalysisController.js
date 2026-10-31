@@ -26,6 +26,10 @@ class MemoryAnalysisController {
                 return files.map((file) => file.fsPath);
             },
             selection: (elf) => options.context.workspaceState.get("memoryAnalysis.sources", {})[elf] || {},
+            keilSelection: () => ({
+                project: options.context.workspaceState.get("mcu.keilProject", ""),
+                target: options.context.workspaceState.get("mcu.keilTarget", "")
+            }),
             regionKinds: () => options.vscode.workspace.getConfiguration("emberprobe").get("memory.regionKinds", {})
         });
         this.configurationListener = options.vscode.workspace.onDidChangeConfiguration?.((event) => {

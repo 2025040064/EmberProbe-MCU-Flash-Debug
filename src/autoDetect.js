@@ -153,4 +153,4 @@ async function detectWorkspace(vscode, options = {}) {
     };
 }
 
-module.exports = { detectWorkspace, elfImages };
+module.exports = { detectWorkspace, detectDebugger, elfImages };

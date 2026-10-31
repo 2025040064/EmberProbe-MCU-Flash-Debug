@@ -27,9 +27,12 @@ async function run() {
     const commands = new Set(await vscode.commands.getCommands(true));
     for (const command of [
         "mcu-vscode.folderDebug",
+        "mcu-vscode.importKeil",
+        "mcu-vscode.readCurrentKeil",
         "mcu-vscode.folderAttachDebug",
         "mcu-vscode.folderDownload",
         "mcu-vscode.openLiveWatch",
+        "mcu-vscode.openSerial",
         "mcu-vscode.checkOpenOcd",
         "mcu-vscode.installMcpServer",
         "mcu-vscode.enableAgentAccess",
@@ -38,6 +41,14 @@ async function run() {
         assert.ok(commands.has(command), `Expected command ${command}`);
     }
     console.log("✓ activates and registers public commands");
+
+    await vscode.commands.executeCommand("mcu-vscode.openSerial");
+    const serial = extension.exports.debugTestProvider._serialPanel;
+    assert.ok(serial?.panel && serial.monitor, "serial UI and bundled native binding load in the extension host");
+    assert.strictEqual(serial.monitor.snapshot().connected, false);
+    serial.panel.dispose();
+    await serial.closing;
+    console.log("✓ serial monitor opens and releases its panel without opening hardware");
 
     // Hosts with the MCP API register the provider; older versions skip it quietly (unit tests cover the skip path).
     const mcpSupported = typeof vscode.lm?.registerMcpServerDefinitionProvider === "function";
