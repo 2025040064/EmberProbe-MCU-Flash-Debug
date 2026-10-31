@@ -7,12 +7,14 @@ const targets = require("../../skills/_emberprobe/target-detection");
 function parseCpuMemory(cpu) {
     const regions = [];
     for (const match of String(cpu || "").matchAll(
-        /\b(IRAM\d*|IROM\d*)\s*\(\s*(0x[\da-f]+|\d+)\s*,\s*(0x[\da-f]+|\d+)\s*\)/gi
+        /\b(IRAM\d*|IROM\d*)\s*\(\s*(0x[\da-f]+|\d+)\s*([,-])\s*(0x[\da-f]+|\d+)\s*\)/gi
     )) {
         const origin = Number(match[2]),
-            capacity = Number(match[3]);
+            endOrSize = Number(match[4]),
+            capacity = match[3] === "-" ? endOrSize - origin + 1 : endOrSize;
         if (
             !Number.isSafeInteger(origin) ||
+            !Number.isSafeInteger(endOrSize) ||
             !Number.isSafeInteger(capacity) ||
             origin < 0 ||
             capacity <= 0 ||
@@ -39,14 +41,16 @@ function parseKeilProject(text, file) {
         const outputName = String(common.OutputName || "").trim();
         const outputDir = String(common.OutputDirectory || ".").replace(/[\\/]/g, path.sep);
         const unresolved = /[$%]/.test(outputName + outputDir);
+        const suffix = path.extname(outputName);
         const firmware =
             outputName && !unresolved && String(common.CreateExecutable) !== "0"
-                ? path.resolve(
-                      path.dirname(file),
-                      outputDir,
-                      /\.(axf|elf)$/i.test(outputName) ? outputName : outputName + ".axf"
-                  )
+                ? path.resolve(path.dirname(file), outputDir, suffix ? outputName : outputName + ".axf")
                 : "";
+        // Some toolchains append .axf even when the configured output name already contains a dot.
+        const firmwareAlternates =
+            firmware && suffix && !/\.(axf|elf)$/i.test(outputName)
+                ? [path.resolve(path.dirname(file), outputDir, outputName + ".axf")]
+                : [];
         const driver = String(entry.TargetOption?.DebugOption?.TargetDlls?.Driver || "");
         const debuggerConfig = /st.?link/i.test(driver)
             ? "stlink.cfg"
@@ -60,6 +64,7 @@ function parseKeilProject(text, file) {
             name,
             device,
             firmware,
+            firmwareAlternates,
             memoryRegions: parseCpuMemory(common.Cpu),
             mcu: targets.targetFromText(`<Device>${device}</Device>`),
             debugger: debuggerConfig
@@ -75,19 +80,21 @@ async function readKeilProject(file) {
 
 async function readKeilTarget(target) {
     if (!target.firmware) return { ...target, elf: "", firmwareStatus: "missing" };
-    let handle;
-    try {
-        handle = await fs.open(target.firmware, "r");
-        const header = Buffer.alloc(52);
-        const { bytesRead } = await handle.read(header, 0, header.length, 0);
-        const valid = bytesRead === 52 && targets.elfHeaderInfo(header)?.arch === "arm";
-        return { ...target, elf: valid ? target.firmware : "", firmwareStatus: valid ? "ready" : "invalid" };
-    } catch (error) {
-        if (error.code !== "ENOENT") throw error;
-        return { ...target, elf: "", firmwareStatus: "missing" };
-    } finally {
-        await handle?.close();
+    for (const firmware of [target.firmware, ...(target.firmwareAlternates || [])]) {
+        let handle;
+        try {
+            handle = await fs.open(firmware, "r");
+            const header = Buffer.alloc(52);
+            const { bytesRead } = await handle.read(header, 0, header.length, 0);
+            const valid = bytesRead === 52 && targets.elfHeaderInfo(header)?.arch === "arm";
+            return { ...target, firmware, elf: valid ? firmware : "", firmwareStatus: valid ? "ready" : "invalid" };
+        } catch (error) {
+            if (error.code !== "ENOENT") throw error;
+        } finally {
+            await handle?.close();
+        }
     }
+    return { ...target, elf: "", firmwareStatus: "missing" };
 }
 
 function inside(file, root) {

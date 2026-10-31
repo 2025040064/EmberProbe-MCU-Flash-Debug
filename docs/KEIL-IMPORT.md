@@ -14,6 +14,7 @@
 
 - 读取所选 Target 的 `Device`、`OutputDirectory`、`OutputName`、`CreateExecutable` 和 `DebugOption/TargetDlls/Driver`。
 - 根据输出目录定位 AXF/ELF，只读取固定长度文件头验证 ARM ELF。不会按修改时间误选其他 Target 的输出。
+- 输出名带点时先尝试 Keil 配置的完整文件名（如 `D10.10_serial`），不存在时再检查同名追加 `.axf`；不会把无效的首选输出静默替换成其他文件。
 - 无固件或文件格式错误时清除旧固件绑定并提示重新编译，不执行构建脚本。
 - 已连接的唯一探针优先；无探针时，可从 Keil 驱动名称识别 ST-Link、J-Link 或 CMSIS-DAP。无法判断时在「已连接调试器」中选择，不会自动更换驱动。
 - 工程目录下唯一的 `.ioc` 自动关联；Keil 工程放在 MDK-ARM、MDK、Keil 子目录时，也检查上一层工程目录。没有 `.ioc` 不影响导入。

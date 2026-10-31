@@ -59,6 +59,26 @@ const xml = `<Project><Targets>${target("Debug &amp; Test", "STM32F103C8", "app"
         header.writeUInt16LE(40, 18);
         await fs.writeFile(parsed[0].firmware, header);
         assert.strictEqual((await readKeilTarget(parsed[0])).elf, parsed[0].firmware);
+
+        // Keil treats the dot in this OutputName as an existing suffix and writes the ELF at the exact name.
+        const dotted = parseKeilProject(
+            `<Project><Targets>${target("D10.10_serial", "STM32G431RB", "D10.10_serial")}</Targets></Project>`,
+            file
+        )[0];
+        const dottedPath = path.join(root, "Objects", "D10.10_serial");
+        await fs.writeFile(dottedPath, header);
+        assert.strictEqual(dotted.firmware, dottedPath, "the configured name with a dot is Keil's output path");
+        assert.strictEqual((await readKeilTarget(dotted)).elf, dottedPath, "read the ARM ELF without adding .axf");
+        await fs.unlink(dottedPath);
+        await fs.writeFile(dottedPath + ".axf", header);
+        assert.strictEqual((await readKeilTarget(dotted)).elf, dottedPath + ".axf", "allow the exact name plus .axf");
+        await fs.writeFile(dottedPath, "invalid ELF");
+        assert.strictEqual(
+            (await readKeilTarget(dotted)).firmwareStatus,
+            "invalid",
+            "do not hide a broken primary output"
+        );
+
         header.writeUInt16LE(243, 18);
         await fs.writeFile(parsed[0].firmware, header);
         assert.strictEqual((await readKeilTarget(parsed[0])).firmwareStatus, "invalid");
@@ -116,6 +136,15 @@ const xml = `<Project><Targets>${target("Debug &amp; Test", "STM32F103C8", "app"
         assert.strictEqual(workspace.get("mcu.mcuCore"), "stm32f1x.cfg");
         assert.strictEqual(workspace.get("mcu.debugger"), "stlink.cfg");
         assert.strictEqual(workspace.get("mcu.iocPath"), path.join(root, "board.ioc"));
+        await fs.writeFile(dottedPath, header);
+        await fs.writeFile(
+            file,
+            `<Project><Targets>${target("Dotted", "STM32F103C8", "D10.10_serial")}</Targets></Project>`
+        );
+        await importKeilProject(provider, vscode, { resource: { fsPath: file } });
+        assert.strictEqual(workspace.get("mcu.elfPath"), dottedPath, "import binds the actual ELF with a dotted name");
+        await fs.writeFile(file, `<Project><Targets>${target("Debug", "STM32F103C8", "app")}</Targets></Project>`);
+        await importKeilProject(provider, vscode, { resource: { fsPath: file } });
         cancel = true;
         const before = [...workspace];
         assert.strictEqual(await importKeilProject(provider, vscode, { browse: true }), null);

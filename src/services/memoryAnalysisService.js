@@ -4,7 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const { parseMap, parseLinkerScript, stripComments } = require("../memoryRegions");
 const { analyzeMemory, topSymbols } = require("../memoryAnalysis");
-const { readKeilProject } = require("./keilProject");
+const { readKeilProject, readKeilTarget } = require("./keilProject");
 
 class MemoryAnalysisService {
     /** @param {any} options */
@@ -101,12 +101,13 @@ class MemoryAnalysisService {
         if (!requestedMap && !params.linkerScript && !selected.linkerScript && keil.project && keil.target) {
             try {
                 const candidates = await readKeilProject(keil.project);
-                const target = candidates.find((item) => item.name === keil.target);
+                const selectedTarget = candidates.find((item) => item.name === keil.target);
+                const target = selectedTarget ? await readKeilTarget(selectedTarget) : null;
                 const same = (a, b) =>
                     process.platform === "win32"
                         ? path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase()
                         : path.resolve(a) === path.resolve(b);
-                if (target?.firmware && same(target.firmware, snapshot.elf.path) && target.memoryRegions.length) {
+                if (target?.elf && same(target.elf, snapshot.elf.path) && target.memoryRegions.length) {
                     definitions = target.memoryRegions;
                     source.kind = "keil";
                     source.keilProject = keil.project;
@@ -118,7 +119,8 @@ class MemoryAnalysisService {
         }
         if (requestedMap) maps = [this.filePath(requestedMap, snapshot.elf.path, ".map")];
         else {
-            maps = [snapshot.elf.path.replace(/\.(?:elf|axf|out)$/i, ".map"), snapshot.elf.path + ".map"];
+            const replaced = snapshot.elf.path.replace(/\.(?:elf|axf|out)$/i, ".map");
+            maps = [replaced !== snapshot.elf.path ? replaced : "", snapshot.elf.path + ".map"].filter(Boolean);
             for (const file of maps) this.files.add(file);
             maps = [...new Set(maps)].filter((file) => this.fs.existsSync(file));
         }
