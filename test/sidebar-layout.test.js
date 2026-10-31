@@ -17,12 +17,15 @@ try {
     assert.strictEqual(config.previousElementSibling.id, "keilImportSection");
     assert.strictEqual(doc.getElementById("keilImportSection").previousElementSibling.id, "noticeGlobal");
     assert.strictEqual(doc.querySelector("#keilImportSection button").dataset.command, "mcu-vscode.readCurrentKeil");
+    assert.ok(config.querySelector('[data-command="mcu-vscode.importKeil"]'), "manual import is inside configuration");
+    assert.ok(!doc.querySelector('#keilImportSection [data-command="mcu-vscode.importKeil"]'));
+    assert.ok(!doc.getElementById("noticeConfig").closest("details"), "import errors remain visible while folded");
     assert.strictEqual(config.open, false, "the configuration card is folded on first use");
     const summary = doc.getElementById("mcuConfigSummary");
     assert.strictEqual(summary.textContent, "STM32F4x · ST-Link");
-    assert.strictEqual(config.querySelector("summary .config-title").textContent, "MCU 配置");
+    assert.strictEqual(config.querySelector("summary .config-title").textContent, "手动导入与配置");
     view.send({ type: "setLang", lang: "en" });
-    assert.strictEqual(config.querySelector("summary .config-title").textContent, "MCU Configuration");
+    assert.strictEqual(config.querySelector("summary .config-title").textContent, "Manual import and configuration");
     assert.strictEqual(summary.textContent, "STM32F4x · ST-Link", "a language change keeps the summary");
     view.send({ type: "debuggerConfig", debugger: "jlink.cfg" });
     assert.strictEqual(summary.textContent, "STM32F4x · J-Link");
@@ -69,6 +72,13 @@ try {
     assert.strictEqual(doc.getElementById("flashStatus").dataset.state, "ready");
     view.send({ type: "notice", area: "flash", id: "mcu-vscode.download", notice: { level: "info", busy: true } });
     assert.strictEqual(doc.getElementById("noticeFlash").hidden, false);
+    const progress = doc.getElementById("flashProgress");
+    assert.strictEqual(progress.dataset.state, "busy");
+    assert.strictEqual(progress.hasAttribute("aria-valuenow"), false, "unknown progress must not invent a percentage");
+    view.send({ type: "notice", area: "flash", id: "mcu-vscode.download", notice: { level: "success" } });
+    assert.strictEqual(progress.dataset.state, "success");
+    view.send({ type: "notice", area: "flash", id: "mcu-vscode.download", notice: { level: "error" } });
+    assert.strictEqual(progress.dataset.state, "error");
     view.send({ type: "noticeClear", area: "flash", id: "mcu-vscode.download" });
     assert.strictEqual(doc.getElementById("noticeFlash").hidden, true);
 } finally {

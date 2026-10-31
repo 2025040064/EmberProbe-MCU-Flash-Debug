@@ -2974,6 +2974,11 @@ window.EmberProbeMessages.connect(window, {
     },
     notice: function (m) {
         setNotice(m.area, m.id, window.EmberProbeNotice.hostNotice(m.notice));
+        if (m.area === "flash" && m.id === "mcu-vscode.download") {
+            const progress = document.getElementById("flashProgress");
+            if (progress)
+                progress.dataset.state = m.notice.busy ? "busy" : m.notice.level === "success" ? "success" : "error";
+        }
     },
     noticeClear: function (m) {
         clearNotice(m.area, m.id);

@@ -1117,6 +1117,7 @@ class MainViewProvider {
             // OpenOCD progress lines, kept for the failure's diagnostic panel.
             const progressLog = [];
             try {
+                notify({ level: "info", busy: true, key: "run.starting" });
                 const configuredExecutable = vscode.workspace
                     .getConfiguration("emberprobe")
                     .get("openocdPath", "openocd");
