@@ -21,7 +21,7 @@ function encodeInput(text, mode, newline) {
     return data;
 }
 
-function formatRecords(records, mode) {
+function formatRecords(records, mode, directions = { rx: "RX", tx: "TX" }) {
     const decoders = { rx: new StringDecoder("utf8"), tx: new StringDecoder("utf8") };
     return records
         .map((record) => {
@@ -30,7 +30,7 @@ function formatRecords(records, mode) {
                 mode === "hex"
                     ? bytes.toString("hex").toUpperCase().match(/../g)?.join(" ") || ""
                     : decoders[record.direction].write(bytes);
-            return `[${new Date(record.time).toLocaleTimeString()}] ${record.direction.toUpperCase()} ${content}`;
+            return `[${new Date(record.time).toLocaleTimeString()}] ${directions[record.direction]} ${content}`;
         })
         .join("\n");
 }

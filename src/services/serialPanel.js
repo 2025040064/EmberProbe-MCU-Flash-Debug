@@ -66,16 +66,16 @@ class SerialPanel {
             ["none", this.t("serial.none")],
             ["even", this.t("serial.even")],
             ["odd", this.t("serial.odd")],
-            ["mark", "Mark"],
-            ["space", "Space"]
+            ["mark", this.t("serial.mark")],
+            ["space", this.t("serial.space")]
         ])}</select></label>
 <label>${tr("stopBits")}<select id="stopBits">${options([
             ["1", "1"],
             ["2", "2"]
         ])}</select></label><button id="connect" class="primary" type="button">${tr("connect")}</button></section>
-<div class="toolbar"><strong>${tr("receive")}</strong><label>${tr("display")} <select id="display"><option value="text">${tr("text")}</option><option value="hex">HEX</option></select></label><span id="counters"></span><button id="clear" type="button">${tr("clear")}</button><button id="save" type="button">${tr("save")}</button></div>
+<div class="toolbar"><strong>${tr("receive")}</strong><label>${tr("display")} <select id="display"><option value="text">${tr("text")}</option><option value="hex">${tr("hex")}</option></select></label><span id="counters"></span><button id="clear" type="button">${tr("clear")}</button><button id="save" type="button">${tr("save")}</button></div>
 <pre id="log" role="log" aria-label="${tr("receive")}" tabindex="0"></pre><div id="notice" role="status"></div>
-<section class="send"><label for="input">${tr("send")}</label><textarea id="input" rows="3" spellcheck="false"></textarea><div class="toolbar"><label>${tr("format")} <select id="mode"><option value="text">${tr("text")}</option><option value="hex">HEX</option></select></label><label>${tr("newline")} <select id="newline"><option value="none">${tr("none")}</option><option value="crlf">CRLF</option><option value="lf">LF</option><option value="cr">CR</option></select></label><button id="send" class="primary" type="button">${tr("send")}</button><label>${tr("interval")} <input id="interval" type="number" min="20" max="86400000" value="1000"> ms</label><button id="repeat" type="button">${tr("startRepeat")}</button></div></section></main>
+<section class="send"><label for="input">${tr("send")}</label><textarea id="input" rows="3" spellcheck="false"></textarea><div class="toolbar"><label>${tr("format")} <select id="mode"><option value="text">${tr("text")}</option><option value="hex">${tr("hex")}</option></select></label><label>${tr("newline")} <select id="newline"><option value="none">${tr("none")}</option><option value="crlf">${tr("crlf")}</option><option value="lf">${tr("lf")}</option><option value="cr">${tr("cr")}</option></select></label><button id="send" class="primary" type="button">${tr("send")}</button><label>${tr("interval")} <input id="interval" type="number" min="20" max="86400000" value="1000"> ${tr("milliseconds")}</label><button id="repeat" type="button">${tr("startRepeat")}</button></div></section></main>
 <script src="${script}"></script></body></html>`;
         const listener = panel.webview.onDidReceiveMessage(async (message) => {
             if (!message || typeof message.type !== "string") return;
@@ -94,7 +94,10 @@ class SerialPanel {
                                 disconnect: this.t("serial.disconnect"),
                                 startRepeat: this.t("serial.startRepeat"),
                                 stopRepeat: this.t("serial.stopRepeat"),
-                                truncated: this.t("serial.truncated")
+                                truncated: this.t("serial.truncated"),
+                                received: this.t("serial.received"),
+                                sent: this.t("serial.sent"),
+                                byteUnit: this.t("serial.byteUnit")
                             }
                         });
                         await panel.webview.postMessage({ type: "serialPorts", ports: await monitor.list() });
@@ -125,7 +128,10 @@ class SerialPanel {
                         if (uri)
                             await fs.writeFile(
                                 uri.fsPath,
-                                formatRecords(monitor.snapshot().records, message.mode === "hex" ? "hex" : "text"),
+                                formatRecords(monitor.snapshot().records, message.mode === "hex" ? "hex" : "text", {
+                                    rx: this.t("serial.received"),
+                                    tx: this.t("serial.sent")
+                                }),
                                 "utf8"
                             );
                         break;

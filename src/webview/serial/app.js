@@ -50,7 +50,8 @@ function append(record) {
             : decoders[record.direction].decode(data, { stream: true });
     const line = document.createElement("span");
     line.className = record.direction;
-    line.textContent = `[${new Date(record.time).toLocaleTimeString()}] ${record.direction.toUpperCase()} ${content}\n`;
+    const direction = labels[record.direction === "rx" ? "received" : "sent"] || record.direction.toUpperCase();
+    line.textContent = `[${new Date(record.time).toLocaleTimeString()}] ${direction} ${content}\n`;
     ui.log.append(line);
 }
 function render() {
@@ -69,8 +70,9 @@ function update(next) {
         ui[key].disabled = !!status.connected || !!status.opening;
     ui.send.disabled = ui.repeat.disabled = !status.connected;
     ui.repeat.textContent = status.repeating ? labels.stopRepeat : labels.startRepeat;
-    ui.counters.textContent = `RX ${status.rxBytes || 0} B · TX ${status.txBytes || 0} B`;
-    if (status.droppedBytes) ui.notice.textContent = `${labels.truncated}: ${status.droppedBytes} B`;
+    ui.counters.textContent = `${labels.received || "RX"} ${status.rxBytes || 0} ${labels.byteUnit || "B"} · ${labels.sent || "TX"} ${status.txBytes || 0} ${labels.byteUnit || "B"}`;
+    if (status.droppedBytes)
+        ui.notice.textContent = `${labels.truncated}: ${status.droppedBytes} ${labels.byteUnit || "B"}`;
 }
 ui.refresh.onclick = () => post("list");
 ui.connect.onclick = () =>
