@@ -20,7 +20,7 @@ const autoDetect = require("./autoDetect");
 const { SerialPanel } = require("./services/serialPanel");
 const { runtimeMemoryItems, decodeRuntimeMemory } = require("./services/runtimeMemory");
 const { importKeilProject } = require("./services/keilImport");
-const { executeKeilBuild } = require("./services/keilBuild");
+const { resolveImportedKeilFirmware } = require("./services/keilFirmware");
 const { importCurrentProject, restoreKeilConfiguration, runEspIdfAction } = require("./services/espIdfProject");
 const { ELF_FILE_GLOB } = require("../skills/_emberprobe/target-detection");
 const skillInstaller = require("./skillInstaller");
@@ -787,11 +787,6 @@ class MainViewProvider {
             importKeilProject(this, vscode, { resource, browse: !resource });
         this.commandHandlers["mcu-vscode.readCurrentKeil"] = async (resource) =>
             importCurrentProject(this, vscode, resource);
-        this._lastSourceEditor = vscode.window.activeTextEditor;
-        if (vscode.window.onDidChangeActiveTextEditor) this._context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor((editor) => {
-            if (editor?.document?.uri?.scheme === "file") this._lastSourceEditor = editor;
-        }));
-        this.commandHandlers["mcu-vscode.keilBuild"] = () => executeKeilBuild(this, vscode);
         this.commandHandlers["mcu-vscode.espBuild"] = () => this._runEspIdfAction("build", "mcu-vscode.espBuild");
         this.commandHandlers["mcu-vscode.espPort"] = () => this._runEspIdfAction("port", "mcu-vscode.espPort");
         this.commandHandlers["mcu-vscode.restoreKeil"] = () => restoreKeilConfiguration(this);
@@ -1178,6 +1173,11 @@ class MainViewProvider {
                 const executable = await this._resolveOpenOcdPath(configuredExecutable);
                 if (!executable) return warn("notice.openocdRequired");
                 let elfPath = this._context.workspaceState.get(CACHE_KEYS.elfPath);
+                const importedFirmware = await resolveImportedKeilFirmware(this._context.workspaceState);
+                if (importedFirmware) {
+                    elfPath = importedFirmware;
+                    await this._context.workspaceState.update(CACHE_KEYS.elfPath, elfPath);
+                }
                 const debuggerCfg =
                     this._context.workspaceState.get(CACHE_KEYS.debugger) ||
                     (await this._probeConnectionService.resolveProbe());
