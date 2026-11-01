@@ -20,6 +20,7 @@ const autoDetect = require("./autoDetect");
 const { SerialPanel } = require("./services/serialPanel");
 const { runtimeMemoryItems, decodeRuntimeMemory } = require("./services/runtimeMemory");
 const { importKeilProject } = require("./services/keilImport");
+const { executeKeilBuild } = require("./services/keilBuild");
 const { importCurrentProject, restoreKeilConfiguration, runEspIdfAction } = require("./services/espIdfProject");
 const { ELF_FILE_GLOB } = require("../skills/_emberprobe/target-detection");
 const skillInstaller = require("./skillInstaller");
@@ -786,6 +787,7 @@ class MainViewProvider {
             importKeilProject(this, vscode, { resource, browse: !resource });
         this.commandHandlers["mcu-vscode.readCurrentKeil"] = async (resource) =>
             importCurrentProject(this, vscode, resource);
+        this.commandHandlers["mcu-vscode.keilBuild"] = () => executeKeilBuild(this, vscode);
         this.commandHandlers["mcu-vscode.espBuild"] = () => this._runEspIdfAction("build", "mcu-vscode.espBuild");
         this.commandHandlers["mcu-vscode.espPort"] = () => this._runEspIdfAction("port", "mcu-vscode.espPort");
         this.commandHandlers["mcu-vscode.restoreKeil"] = () => restoreKeilConfiguration(this);
