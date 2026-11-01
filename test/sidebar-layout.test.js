@@ -87,6 +87,37 @@ try {
 }
 console.log("Sidebar layout: Keil import, serial entry, memory and collapsible device tools");
 
+view = render(
+    getModernWebviewContent({ projectType: "espidf", espIdfProject: "C:/demo/blink", espIdfTarget: "esp32c6" }, "zh")
+);
+try {
+    const doc = view.document;
+    assert.ok(doc.body.classList.contains("esp-idf-mode"));
+    assert.match(doc.querySelector(".esp-project").textContent, /blink.*esp32c6/s);
+    assert.ok(doc.querySelector('[data-command="mcu-vscode.espBuild"]'));
+    assert.ok(doc.querySelector('[data-command="mcu-vscode.espPort"]'));
+    assert.ok(doc.querySelector('[data-command="mcu-vscode.restoreKeil"]'));
+    assert.strictEqual(doc.querySelector('[data-command="mcu-vscode.debug"]').textContent, "ESP-IDF 调试");
+    doc.querySelector('[data-command="mcu-vscode.espBuild"]').click();
+    assert.strictEqual(
+        doc.getElementById("mcuConfigSection").open,
+        false,
+        "ESP actions do not reveal ARM configuration"
+    );
+    assert.deepStrictEqual(view.messages.at(-1), { type: "executeCommand", cmd: "mcu-vscode.espBuild" });
+    view.send({ type: "notice", area: "flash", id: "mcu-vscode.download", notice: { level: "info", busy: true } });
+    view.send({
+        type: "notice",
+        area: "flash",
+        id: "mcu-vscode.download",
+        notice: { level: "info", key: "esp.completed" }
+    });
+    assert.strictEqual(doc.getElementById("flashProgress").dataset.state, "idle", "delegation must not imply success");
+    view.assertHealthy();
+} finally {
+    view.close();
+}
+
 (async () => {
     const clock = new FakeClock();
     const panel = render(getModernWebviewContent(configured, "zh"), {}, { clock });

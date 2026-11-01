@@ -9,12 +9,13 @@ const escape = (value) =>
     );
 
 class SerialPanel {
-    /** @param {{ vscode: any, context: any, t: Function, onStatus?: Function, SerialPort?: any }} options */
-    constructor({ vscode, context, t, onStatus = () => {}, SerialPort }) {
+    /** @param {{ vscode: any, context: any, t: Function, onStatus?: Function, canOpen?: Function, SerialPort?: any }} options */
+    constructor({ vscode, context, t, onStatus = () => {}, canOpen = () => true, SerialPort }) {
         this.vscode = vscode;
         this.context = context;
         this.t = t;
         this.onStatus = onStatus;
+        this.canOpen = canOpen;
         this.SerialPort = SerialPort;
         this.panel = null;
         this.monitor = null;
@@ -106,6 +107,7 @@ class SerialPanel {
                         await panel.webview.postMessage({ type: "serialPorts", ports: await monitor.list() });
                         break;
                     case "open":
+                        if (!this.canOpen()) throw new Error(this.t("esp.serialLocked"));
                         await monitor.open(message.options);
                         break;
                     case "close":

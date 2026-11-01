@@ -14,7 +14,9 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
         SerialPortMock.binding.createPort("COM43", { echo: true });
         const sent = [],
             statuses = [];
-        let receiver, onDispose;
+        let receiver,
+            onDispose,
+            allowOpen = false;
         const webview = {
             cspSource: "https://example.invalid",
             html: "",
@@ -47,6 +49,7 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
             vscode,
             context: { extensionUri: "test" },
             t: (key) => key,
+            canOpen: () => allowOpen,
             onStatus: (state) => statuses.push(state),
             SerialPort: SerialPortMock
         });
@@ -55,6 +58,13 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
         assert(webview.html.includes('id="log"'));
         await receiver({ type: "ready" });
         assert(sent.find((event) => event.type === "serialPorts").ports.some((port) => port.path === "COM43"));
+        await receiver({
+            type: "open",
+            options: { path: "COM43", baudRate: 115200, dataBits: 8, stopBits: 1, parity: "none" }
+        });
+        assert.strictEqual(owner.monitor.snapshot().connected, false, "flash owns the port while opening is locked");
+        assert(sent.some((event) => event.type === "serialError" && event.message === "esp.serialLocked"));
+        allowOpen = true;
         await receiver({
             type: "open",
             options: { path: "COM43", baudRate: 115200, dataBits: 8, stopBits: 1, parity: "none" }

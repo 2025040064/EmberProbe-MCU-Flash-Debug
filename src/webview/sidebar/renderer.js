@@ -585,6 +585,7 @@ function renderConfigSummary() {
     summary.title = shown;
 }
 function revealIncompleteConfiguration(e) {
+    if (document.body.classList.contains("esp-idf-mode")) return;
     if (e?.currentTarget?.hasAttribute?.("data-config-free")) return;
     if (!configurationIncomplete() || !mcuConfigSection || mcuConfigSection.open) return;
     mcuConfigSection.open = true;
@@ -2637,6 +2638,7 @@ function openocdStatus(m) {
     const { state, key, params, message } = m;
     uiState.sidebarStatus.openocd = { state, key, params, message };
     api?.setState?.(uiState);
+    if (document.body.classList.contains("esp-idf-mode")) return clearNotice("global", "openocd");
     const k = m.state || "checking",
         busy = k === "checking" || k === "preparing";
     if (k === "ready") return clearNotice("global", "openocd");
@@ -2988,7 +2990,15 @@ window.EmberProbeMessages.connect(window, {
     notice: function (m) {
         setNotice(m.area, m.id, window.EmberProbeNotice.hostNotice(m.notice));
         if (m.area === "flash" && m.id === "mcu-vscode.download") {
-            setFlashProgress(m.notice.busy ? "busy" : m.notice.level === "success" ? "success" : "error");
+            setFlashProgress(
+                m.notice.busy
+                    ? "busy"
+                    : m.notice.level === "success"
+                      ? "success"
+                      : m.notice.level === "info"
+                        ? "idle"
+                        : "error"
+            );
         }
     },
     noticeClear: function (m) {

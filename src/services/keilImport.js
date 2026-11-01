@@ -66,6 +66,7 @@ async function importKeilProject(provider, vscode, { resource, browse = false, a
     await store.update("mcu.iocPath", iocs.length === 1 ? iocs[0] : "");
     await store.update("mcu.keilProject", file);
     await store.update("mcu.keilTarget", target.name);
+    await store.update("mcu.projectType", "keil");
     await provider._refreshElfBindings();
     await provider.updateView();
     await provider._refreshConnectedProbes();

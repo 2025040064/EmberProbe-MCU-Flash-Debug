@@ -6,6 +6,9 @@ const { toUiError } = require("./errorEnvelope");
 const COMMAND_AREAS = Object.freeze({
     "mcu-vscode.importKeil": "config",
     "mcu-vscode.readCurrentKeil": "config",
+    "mcu-vscode.espBuild": "flash",
+    "mcu-vscode.espPort": "flash",
+    "mcu-vscode.restoreKeil": "config",
     "mcu-vscode.download": "flash",
     "mcu-vscode.debug": "flash",
     "mcu-vscode.attachDebug": "flash",

@@ -20,6 +20,7 @@ const autoDetect = require("./autoDetect");
 const { SerialPanel } = require("./services/serialPanel");
 const { runtimeMemoryItems, decodeRuntimeMemory } = require("./services/runtimeMemory");
 const { importKeilProject } = require("./services/keilImport");
+const { importCurrentProject, restoreKeilConfiguration, runEspIdfAction } = require("./services/espIdfProject");
 const { ELF_FILE_GLOB } = require("../skills/_emberprobe/target-detection");
 const skillInstaller = require("./skillInstaller");
 const openocdRunner = require("./openocdRunner");
@@ -739,12 +740,44 @@ class MainViewProvider {
     async _resolveOpenOcdPath(executable) {
         return this._openOcdStatusService.resolve(executable);
     }
+    async _runEspIdfAction(action, cmd) {
+        if (this._context.workspaceState.get("mcu.projectType") !== "espidf") {
+            this._notices.notify("flash", cmd, { level: "warning", key: "esp.projectChanged" });
+            return false;
+        }
+        if (this._espIdfRunning) {
+            this._notices.notify("flash", cmd, { level: "warning", key: "esp.busy" });
+            return false;
+        }
+        let lease;
+        this._espIdfRunning = action;
+        try {
+            if (action === "flash") lease = this._probeCoordinator.acquire("download");
+            this._notices.notify("flash", cmd, { level: "info", busy: true, key: "esp.executing" });
+            await runEspIdfAction({
+                vscode,
+                root: this._context.workspaceState.get("mcu.espIdfProject"),
+                action,
+                serialBusy: () => !!(this._serialPanel?.monitor?.port || this._serialPanel?.monitor?.opening),
+                t: (key) => this._t(key)
+            });
+            this._notices.notify("flash", cmd, { level: "info", key: "esp.completed" });
+            return true;
+        } catch (error) {
+            this._notices.notify("flash", cmd, { level: "error", error });
+            return false;
+        } finally {
+            lease?.release();
+            this._espIdfRunning = "";
+        }
+    }
     registerCommandHandlers() {
         this.commandHandlers["mcu-vscode.openSerial"] = async () => {
             this._serialPanel ||= new SerialPanel({
                 vscode,
                 context: this._context,
                 t: (key) => this._t(key),
+                canOpen: () => this._espIdfRunning !== "flash",
                 onStatus: (status) => this._webviewView?.webview.postMessage({ type: "serialStatus", ...status })
             });
             this._serialPanel.open();
@@ -752,7 +785,10 @@ class MainViewProvider {
         this.commandHandlers["mcu-vscode.importKeil"] = async (resource) =>
             importKeilProject(this, vscode, { resource, browse: !resource });
         this.commandHandlers["mcu-vscode.readCurrentKeil"] = async (resource) =>
-            importKeilProject(this, vscode, { resource });
+            importCurrentProject(this, vscode, resource);
+        this.commandHandlers["mcu-vscode.espBuild"] = () => this._runEspIdfAction("build", "mcu-vscode.espBuild");
+        this.commandHandlers["mcu-vscode.espPort"] = () => this._runEspIdfAction("port", "mcu-vscode.espPort");
+        this.commandHandlers["mcu-vscode.restoreKeil"] = () => restoreKeilConfiguration(this);
         this.commandHandlers["mcu-vscode.autoDetect"] = async () => this.runAutoDetect(true);
         this.commandHandlers["mcu-vscode.selectCubeMx"] = () => this._cubemxConfiguration.select("cubemx");
         this.commandHandlers["mcu-vscode.selectIoc"] = () => this._cubemxConfiguration.select("ioc");
@@ -862,6 +898,16 @@ class MainViewProvider {
             interactive = true,
             startOptions
         ) => {
+            if (!configuration && this._context.workspaceState.get("mcu.projectType") === "espidf") {
+                if (startOptions?.attach || !interactive) {
+                    this._notices.notify("flash", "mcu-vscode.debug", {
+                        level: "warning",
+                        key: "esp.attachUnavailable"
+                    });
+                    return false;
+                }
+                return this._runEspIdfAction("debug", "mcu-vscode.debug");
+            }
             let probePrepared = false;
             let startAccepted = false;
             let ownsPending = false;
@@ -1086,6 +1132,8 @@ class MainViewProvider {
         // Program firmware
         this.commandHandlers["mcu-vscode.download"] = async (resource) => {
             const cmd = "mcu-vscode.download";
+            if (this._context.workspaceState.get("mcu.projectType") === "espidf")
+                return this._runEspIdfAction("flash", cmd);
             const notify = (notice) => this._notices.notify("flash", cmd, notice);
             const warn = (key, params) => {
                 notify({ level: "warning", key, params });
@@ -7057,6 +7105,9 @@ class MainViewProvider {
         return modernView.getModernWebviewContent(
             {
                 versionLabel: versionLabel(this._context.extension?.packageJSON?.version),
+                projectType: this._context.workspaceState.get("mcu.projectType") || "",
+                espIdfProject: this._context.workspaceState.get("mcu.espIdfProject") || "",
+                espIdfTarget: this._context.workspaceState.get("mcu.espIdfTarget") || "",
                 elf: elf ? path.basename(elf) : "",
                 keilProject: this._context.workspaceState.get("mcu.keilProject") || "",
                 keilTarget: this._context.workspaceState.get("mcu.keilTarget") || "",

@@ -59,6 +59,7 @@ const TEST_GROUPS = Object.freeze({
         "elf-symbols.test.js",
         "elf-write-readiness.test.js",
         "enum-variables.test.js",
+        "esp-idf-project.test.js",
         "extension-shutdown.test.js",
         "external-debug-host.test.js",
         "extracted-services.test.js",
