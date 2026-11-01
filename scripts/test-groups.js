@@ -76,6 +76,7 @@ const TEST_GROUPS = Object.freeze({
         "jlink-driver-choice.test.js",
         "jlink-probe-ready.test.js",
         "keil-build.test.js",
+        "keil-current-file.test.js",
         "keil-import.test.js",
         "keil-memory.test.js",
         "large-object-read-budget.test.js",

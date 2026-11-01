@@ -51,6 +51,15 @@ function parseKeilProject(text, file) {
             firmware && suffix && !/\.(axf|elf)$/i.test(outputName)
                 ? [path.resolve(path.dirname(file), outputDir, outputName + ".axf")]
                 : [];
+        const groupList = entry.Groups?.Group || [];
+        const groups = Array.isArray(groupList) ? groupList : [groupList];
+        const sources = groups
+            .flatMap((group) => {
+                const list = group.Files?.File || [];
+                return (Array.isArray(list) ? list : [list]).map((item) => String(item.FilePath || ""));
+            })
+            .filter(Boolean)
+            .map((filePath) => path.resolve(path.dirname(file), filePath.replace(/[\\/]/g, path.sep)));
         const driver = String(entry.TargetOption?.DebugOption?.TargetDlls?.Driver || "");
         const debuggerConfig = /st.?link/i.test(driver)
             ? "stlink.cfg"
@@ -61,6 +70,7 @@ function parseKeilProject(text, file) {
                 : "";
         return {
             project: file,
+            sources,
             name,
             device,
             firmware,

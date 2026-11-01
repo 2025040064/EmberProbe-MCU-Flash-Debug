@@ -787,6 +787,10 @@ class MainViewProvider {
             importKeilProject(this, vscode, { resource, browse: !resource });
         this.commandHandlers["mcu-vscode.readCurrentKeil"] = async (resource) =>
             importCurrentProject(this, vscode, resource);
+        this._lastSourceEditor = vscode.window.activeTextEditor;
+        if (vscode.window.onDidChangeActiveTextEditor) this._context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor((editor) => {
+            if (editor?.document?.uri?.scheme === "file") this._lastSourceEditor = editor;
+        }));
         this.commandHandlers["mcu-vscode.keilBuild"] = () => executeKeilBuild(this, vscode);
         this.commandHandlers["mcu-vscode.espBuild"] = () => this._runEspIdfAction("build", "mcu-vscode.espBuild");
         this.commandHandlers["mcu-vscode.espPort"] = () => this._runEspIdfAction("port", "mcu-vscode.espPort");

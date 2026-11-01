@@ -3,7 +3,7 @@ const fs = require("fs/promises");
 const path = require("path");
 const os = require("os");
 const { execFile } = require("child_process");
-const { readKeilProject, readKeilTarget } = require("./keilProject");
+const { readKeilProject, readKeilTarget, findKeilProjects } = require("./keilProject");
 
 async function buildKeilProject({ trusted, project, target, executable, validate, run }) {
     if (!trusted) throw new Error("A trusted workspace is required");
@@ -41,16 +41,59 @@ async function runKeil(executable, args) {
     }
 }
 
+function selectKeilTargetsForFile(targets, file) {
+    const normal = (value) => (process.platform === "win32" ? path.resolve(value).toLowerCase() : path.resolve(value));
+    return targets.filter((target) => (target.sources || []).some((source) => normal(source) === normal(file)));
+}
+
+async function resolveCurrentKeilTarget(provider, vscode) {
+    const editor = vscode.window.activeTextEditor || provider._lastSourceEditor;
+    const document = editor?.document;
+    if (!document || document.uri.scheme !== "file") throw new Error(provider._t("keil.openFileFirst"));
+    const resource = document.uri;
+    if (!vscode.workspace.getWorkspaceFolder(resource)) throw new Error(provider._t("keil.fileOutsideWorkspace"));
+    if (document.isDirty && !(await document.save())) throw new Error(provider._t("keil.saveFailed"));
+    const projects = /\.uvprojx?$/i.test(resource.fsPath)
+        ? [resource.fsPath]
+        : await findKeilProjects(vscode, resource);
+    let candidates = [];
+    const allTargets = [];
+    for (const project of projects) {
+        const targets = await readKeilProject(project);
+        allTargets.push(...targets);
+        const matches = /\.uvprojx?$/i.test(resource.fsPath)
+            ? targets
+            : selectKeilTargetsForFile(targets, resource.fsPath);
+        candidates.push(...matches);
+    }
+    const chooseForHeader = !candidates.length && /\.(h|hpp|hxx)$/i.test(resource.fsPath);
+    if (chooseForHeader) candidates = allTargets;
+    if (!candidates.length) throw new Error(provider._t("keil.fileNotInProject"));
+    if (candidates.length === 1 && !chooseForHeader) return candidates[0];
+    const selected = await vscode.window.showQuickPick(
+        candidates.map((item) => ({
+            label: item.name,
+            description: item.project,
+            value: item
+        })),
+        {
+            placeHolder: provider._t(chooseForHeader ? "keil.chooseHeaderTarget" : "keil.chooseTarget"),
+            matchOnDescription: true
+        }
+    );
+    return selected?.value || null;
+}
+
 async function executeKeilBuild(provider, vscode) {
     const cmd = "mcu-vscode.keilBuild";
     if (provider._keilBuildRunning) throw new Error(provider._t("keil.buildBusy"));
     const store = provider._context.workspaceState;
-    const project = store.get("mcu.keilProject"),
-        target = store.get("mcu.keilTarget");
-    if (store.get("mcu.projectType") === "espidf" || !project || !target)
-        throw new Error(provider._t("keil.noProject"));
     if (vscode.workspace.isTrusted === false) throw new Error(provider._t("keil.trustRequired"));
     provider._assertConnectionEditable({ debugger: true, mcu: true });
+    const selectedTarget = await resolveCurrentKeilTarget(provider, vscode);
+    if (!selectedTarget) return false;
+    const project = selectedTarget.project,
+        target = selectedTarget.name;
     let executable = provider._context.globalState.get("mcu.keilExecutable");
     if (
         executable &&
@@ -92,6 +135,7 @@ async function executeKeilBuild(provider, vscode) {
     try {
         provider._notices.notify("config", cmd, { level: "info", busy: true, key: "keil.buildRunning" });
         output.show(true);
+        output.appendLine(`Project: ${project}\nTarget: ${target}`);
         const result = await buildKeilProject({
             trusted: vscode.workspace.isTrusted !== false,
             project,
@@ -127,4 +171,4 @@ async function executeKeilBuild(provider, vscode) {
         provider._keilBuildRunning = false;
     }
 }
-module.exports = { buildKeilProject, executeKeilBuild };
+module.exports = { buildKeilProject, executeKeilBuild, selectKeilTargetsForFile, resolveCurrentKeilTarget };
